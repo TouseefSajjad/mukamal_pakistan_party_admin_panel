@@ -57,24 +57,59 @@ class ApplicationService {
   }
 
   // ── Review action (batch-updates app + user) ──────────────────────────────
+  // `post` is optional — pass it when the admin also wants to allot a party
+  // post (chairman, president, member, etc.) at the moment of approval.
   Future<void> reviewApplication({
     required String applicationId,
     required String userId,
     required String status, // 'approved' | 'rejected' | 'pending'
     required String adminId,
+    String? post,
   }) async {
     final batch = FirebaseFirestore.instance.batch();
 
-    batch.update(_col.doc(applicationId), {
+    final appUpdate = <String, dynamic>{
       'status': status,
       'reviewed_at': FieldValue.serverTimestamp(),
       'reviewed_by': adminId,
-    });
+    };
+    if (post != null) {
+      appUpdate['assigned_post'] = post;
+    }
+    batch.update(_col.doc(applicationId), appUpdate);
 
     if (userId.isNotEmpty) {
-      batch.update(
+      final userUpdate = <String, dynamic>{'membership_status': status};
+      if (post != null) {
+        userUpdate['post'] = post;
+      }
+      // set + merge instead of update: update() throws if the user doc
+      // doesn't exist yet, which would fail the whole batch.
+      batch.set(
         FirebaseFirestore.instance.collection('users').doc(userId),
-        {'membership_status': status},
+        userUpdate,
+        SetOptions(merge: true),
+      );
+    }
+
+    await batch.commit();
+  }
+
+  // ── Assign / change post without touching approval status ────────────────
+  Future<void> assignPost({
+    required String applicationId,
+    required String userId,
+    required String post,
+  }) async {
+    final batch = FirebaseFirestore.instance.batch();
+
+    batch.update(_col.doc(applicationId), {'assigned_post': post});
+
+    if (userId.isNotEmpty) {
+      batch.set(
+        FirebaseFirestore.instance.collection('users').doc(userId),
+        {'post': post},
+        SetOptions(merge: true),
       );
     }
 

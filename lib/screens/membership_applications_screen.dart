@@ -3,9 +3,7 @@ import 'package:mukammal_pakistan_admin/models/services/application_service.dart
 import 'package:mukammal_pakistan_admin/screens/application_detail_screen.dart';
 
 import '../models/membership_application.dart';
-// import '../services/application_service.dart';
 import '../widgets/status_badge.dart';
-// import 'application_detail_screen.dart';
 
 // ── Theme constants ────────────────────────────────────────────────────────────
 const _kGreen = Color(0xFF1B6B3A);
@@ -495,6 +493,9 @@ class _MetaRow extends StatelessWidget {
     }
     if (app.educationInfo.selectedRole.isNotEmpty) {
       parts.add(app.educationInfo.selectedRole.toUpperCase());
+    }
+    if (app.assignedPost != null && app.assignedPost!.isNotEmpty) {
+      parts.add(formatPostLabel(app.assignedPost!));
     }
 
     return Text(

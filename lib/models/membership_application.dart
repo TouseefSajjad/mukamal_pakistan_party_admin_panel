@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+String? _str(dynamic v) => v is String ? v : null;
+
 class ContactInfo {
   final String address;
   final String city;
@@ -46,29 +48,18 @@ class AppDocuments {
   });
 
   factory AppDocuments.fromMap(Map<String, dynamic> m) {
-    // ── CNIC Images ─────────────────────────────────────────────
     final cnicRaw = m['cnic_images'];
+    final List<String> cnicImages =
+    cnicRaw is List ? cnicRaw.whereType<String>().toList() : <String>[];
 
-    final List<String> cnicImages = cnicRaw is List
-        ? cnicRaw.whereType<String>().toList()
-        : <String>[];
-
-    // ── Education Certificate ──────────────────────────────────
     final String educationCertificate =
         (m['education_certificate'] as String?) ?? '';
 
-    // ── Profile Image ──────────────────────────────────────────
-    final String profileImage =
-        (m['profile_image'] as String?) ?? '';
+    final String profileImage = (m['profile_image'] as String?) ?? '';
 
-    // ── Other Documents ────────────────────────────────────────
     final otherRaw = m['other_documents'];
-
     final List<String> otherDocuments = otherRaw is List
-        ? otherRaw
-        .whereType<String>()
-        .where((e) => e.isNotEmpty)
-        .toList()
+        ? otherRaw.whereType<String>().where((e) => e.isNotEmpty).toList()
         : <String>[];
 
     return AppDocuments(
@@ -142,9 +133,7 @@ class PersonalInfo {
 
   factory PersonalInfo.fromMap(Map<String, dynamic> m) {
     DateTime? dob;
-
     final rawDob = m['date_of_birth'];
-
     if (rawDob is Timestamp) {
       dob = rawDob.toDate();
     }
@@ -184,6 +173,10 @@ class MembershipApplication {
   final DateTime submittedAt;
   final String userId;
 
+  /// Party post allotted to this member by an admin (e.g. "chairman",
+  /// "general_secretary", "member" ...). Null until an admin sets it.
+  final String? assignedPost;
+
   const MembershipApplication({
     required this.id,
     required this.contactInfo,
@@ -195,6 +188,7 @@ class MembershipApplication {
     required this.status,
     required this.submittedAt,
     required this.userId,
+    this.assignedPost,
   });
 
   factory MembershipApplication.fromDoc(DocumentSnapshot doc) {
@@ -204,60 +198,76 @@ class MembershipApplication {
 
     Map<String, dynamic> nested(String key) {
       final value = raw[key];
-
       if (value is Map) {
         return Map<String, dynamic>.from(value);
       }
-
       return <String, dynamic>{};
     }
 
-    // ── Reviewed At ────────────────────────────────────────────
+    // ── personal_info, with fallback to legacy flat fields ─────────────
+    var personalMap = nested('personal_info');
+    if (personalMap.isEmpty) {
+      personalMap = {
+        'full_name': _str(raw['full_name']) ?? _str(raw['name']) ?? '',
+        'cnic': _str(raw['cnic']) ?? '',
+        'father_name': _str(raw['father_name']) ?? '',
+        'gender': _str(raw['gender']) ?? '',
+        'date_of_birth': raw['date_of_birth'],
+      };
+    }
+
+    // ── contact_info, with fallback to legacy flat fields ──────────────
+    var contactMap = nested('contact_info');
+    if (contactMap.isEmpty) {
+      contactMap = {
+        'address': _str(raw['address']) ?? '',
+        'city': _str(raw['city']) ?? _str(raw['district']) ?? '',
+        'email': _str(raw['email']) ?? '',
+        'phone': _str(raw['phone']) ?? '',
+      };
+    }
+
+    // ── education_info (no legacy flat equivalent — stays empty if absent)
+    final educationMap = nested('education_info');
+
+    // ── documents, with fallback to legacy flat fields ─────────────────
+    var documentsMap = nested('documents');
+    if (documentsMap.isEmpty) {
+      documentsMap = {
+        'profile_image':
+        _str(raw['profile_image']) ?? _str(raw['profile_picture']) ?? '',
+        'cnic_images': raw['cnic_images'] ?? <String>[],
+        'education_certificate': _str(raw['education_certificate']) ?? '',
+        'other_documents': raw['other_documents'] ?? <String>[],
+      };
+    }
+
+    // ── Reviewed At ──────────────────────────────────────────────────
     DateTime? reviewedAt;
-
     final reviewedRaw = raw['reviewed_at'];
-
     if (reviewedRaw is Timestamp) {
       reviewedAt = reviewedRaw.toDate();
     }
 
-    // ── Submitted At ───────────────────────────────────────────
+    // ── Submitted At ─────────────────────────────────────────────────
     DateTime submittedAt = DateTime.now();
-
     final submittedRaw = raw['submitted_at'];
-
     if (submittedRaw is Timestamp) {
       submittedAt = submittedRaw.toDate();
     }
 
     return MembershipApplication(
       id: doc.id,
-
-      contactInfo: ContactInfo.fromMap(
-        nested('contact_info'),
-      ),
-
-      documents: AppDocuments.fromMap(
-        nested('documents'),
-      ),
-
-      educationInfo: EducationInfo.fromMap(
-        nested('education_info'),
-      ),
-
-      personalInfo: PersonalInfo.fromMap(
-        nested('personal_info'),
-      ),
-
+      contactInfo: ContactInfo.fromMap(contactMap),
+      documents: AppDocuments.fromMap(documentsMap),
+      educationInfo: EducationInfo.fromMap(educationMap),
+      personalInfo: PersonalInfo.fromMap(personalMap),
       reviewedAt: reviewedAt,
-
       reviewedBy: raw['reviewed_by'] as String?,
-
       status: (raw['status'] as String?) ?? 'pending',
-
       submittedAt: submittedAt,
-
       userId: (raw['user_id'] as String?) ?? '',
+      assignedPost: raw['assigned_post'] as String?,
     );
   }
 
@@ -272,6 +282,27 @@ class MembershipApplication {
       'status': status,
       'submitted_at': submittedAt,
       'user_id': userId,
+      'assigned_post': assignedPost,
     };
   }
+}
+
+/// Fixed list of party posts an admin can allot to an approved member.
+/// Edit freely — it drives the dropdown in the detail screen.
+const List<String> kAvailablePosts = [
+  'chairman',
+  'general_secretary',
+  'president',
+  'president_of_uc',
+  'vice_chairman',
+  'vice_president',
+  'vice_president_of_uc',
+  'member',
+];
+
+String formatPostLabel(String post) {
+  return post
+      .split('_')
+      .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+      .join(' ');
 }

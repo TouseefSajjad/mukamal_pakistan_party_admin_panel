@@ -29,9 +29,14 @@ class ApplicationDetailScreen extends StatefulWidget {
 
 class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
   bool _isUpdating = false;
+  String? _selectedPost;
 
   // ── Review action ─────────────────────────────────────────────────────────
-  Future<void> _review(MembershipApplication app, String status) async {
+  Future<void> _review(
+      MembershipApplication app,
+      String status, {
+        String? post,
+      }) async {
     setState(() => _isUpdating = true);
     try {
       await ApplicationService.instance.reviewApplication(
@@ -39,6 +44,7 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
         userId: app.userId,
         status: status,
         adminId: 'admin',
+        post: post,
       );
       if (mounted) {
         _showSnack(
@@ -54,6 +60,26 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
       if (mounted) {
         _showSnack('Error: $e', Colors.red);
       }
+    } finally {
+      if (mounted) setState(() => _isUpdating = false);
+    }
+  }
+
+  Future<void> _saveAssignedPost(MembershipApplication app) async {
+    if (_selectedPost == null) return;
+    setState(() => _isUpdating = true);
+    try {
+      await ApplicationService.instance.assignPost(
+        applicationId: app.id,
+        userId: app.userId,
+        post: _selectedPost!,
+      );
+      if (mounted) {
+        _showSnack(
+            'Post assigned: ${formatPostLabel(_selectedPost!)}', _kGreen);
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Error: $e', Colors.red);
     } finally {
       if (mounted) setState(() => _isUpdating = false);
     }
@@ -77,43 +103,90 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
       String action,
       String status,
       ) {
+    // When approving, let the admin pick a post right inside this dialog.
+    String? dialogPost = _selectedPost;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Confirm ${_cap(action)}',
-            style: const TextStyle(
-                fontWeight: FontWeight.w700, color: _kTextPrimary)),
-        content: Text(
-          'Are you sure you want to $action this application?\n'
-              'This will update the applicant\'s membership status.',
-          style: const TextStyle(color: _kTextSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel',
-                style: TextStyle(color: _kTextSecondary)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _review(app, status);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: status == 'approved'
-                  ? const Color(0xFF10B981)
-                  : status == 'rejected'
-                  ? const Color(0xFFEF4444)
-                  : const Color(0xFFF59E0B),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text('Confirm ${_cap(action)}',
+                style: const TextStyle(
+                    fontWeight: FontWeight.w700, color: _kTextPrimary)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Are you sure you want to $action this application?\n'
+                      'This will update the applicant\'s membership status.',
+                  style: const TextStyle(color: _kTextSecondary),
+                ),
+                if (status == 'approved') ...[
+                  const SizedBox(height: 16),
+                  const Text(
+                    'ASSIGN POST (optional)',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _kTextSecondary,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: dialogPost,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: _kBorder),
+                      ),
+                    ),
+                    hint: const Text('No post'),
+                    items: kAvailablePosts
+                        .map((p) => DropdownMenuItem(
+                      value: p,
+                      child: Text(formatPostLabel(p)),
+                    ))
+                        .toList(),
+                    onChanged: (v) => setDialogState(() => dialogPost = v),
+                  ),
+                ],
+              ],
             ),
-            child: Text(_cap(action)),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel',
+                    style: TextStyle(color: _kTextSecondary)),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  _review(app, status, post: dialogPost);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: status == 'approved'
+                      ? const Color(0xFF10B981)
+                      : status == 'rejected'
+                      ? const Color(0xFFEF4444)
+                      : const Color(0xFFF59E0B),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                child: Text(_cap(action)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -142,6 +215,7 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
           }
 
           final app = snap.data!;
+          _selectedPost ??= app.assignedPost;
 
           return LayoutBuilder(
             builder: (context, constraints) {
@@ -177,6 +251,14 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
                         _EducationCard(app: app),
                         const SizedBox(height: 20),
                         _DocumentsCard(app: app),
+                        const SizedBox(height: 20),
+                        _PostCard(
+                          app: app,
+                          selectedPost: _selectedPost,
+                          onChanged: (v) => setState(() => _selectedPost = v),
+                          onSave: () => _saveAssignedPost(app),
+                          isSaving: _isUpdating,
+                        ),
                         const SizedBox(height: 20),
                         _StatusCard(app: app),
                         const SizedBox(height: 20),
@@ -772,6 +854,85 @@ class _DocImageState extends State<_DocImage> {
     );
   }
 }
+
+// ── Post assignment card ───────────────────────────────────────────────────
+
+class _PostCard extends StatelessWidget {
+  final MembershipApplication app;
+  final String? selectedPost;
+  final ValueChanged<String?> onChanged;
+  final VoidCallback onSave;
+  final bool isSaving;
+
+  const _PostCard({
+    required this.app,
+    required this.selectedPost,
+    required this.onChanged,
+    required this.onSave,
+    required this.isSaving,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _CardTitle(
+              icon: Icons.workspace_premium_rounded, label: 'Assigned Post'),
+          const SizedBox(height: 6),
+          const Text(
+            'Choose which party post this member holds. This can be set '
+                'independently of approve/reject, or picked at approval time.',
+            style: TextStyle(fontSize: 12, color: _kTextSecondary),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: selectedPost,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: _kBorder),
+                    ),
+                  ),
+                  hint: const Text('No post assigned'),
+                  items: kAvailablePosts
+                      .map((p) => DropdownMenuItem(
+                    value: p,
+                    child: Text(formatPostLabel(p)),
+                  ))
+                      .toList(),
+                  onChanged: onChanged,
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton(
+                onPressed: isSaving ? null : onSave,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _kGreen,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Application Status Card ───────────────────────────────────────────────────
 
 class _StatusCard extends StatelessWidget {
@@ -821,6 +982,12 @@ class _StatusCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          if (app.assignedPost != null && app.assignedPost!.isNotEmpty)
+            _Field(
+              label: 'Assigned Post',
+              value: formatPostLabel(app.assignedPost!),
+              highlight: true,
             ),
         ],
       ),
