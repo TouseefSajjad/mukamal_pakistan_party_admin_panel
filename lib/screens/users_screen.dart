@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:mukammal_pakistan_admin/models/services/user_service.dart';
 import '../models/app_user.dart';
@@ -63,6 +64,13 @@ class _UsersScreenState extends State<UsersScreen> {
     super.dispose();
   }
 
+  // ── Roles collection stream (drives the role dropdown) ────────────────────
+  Stream<List<String>> _streamRoleNames() {
+    return FirebaseFirestore.instance.collection('roles').snapshots().map(
+          (snap) => snap.docs.map((d) => d.id).toList(),
+    );
+  }
+
   // ── Client-side filtering ─────────────────────────────────────────────────
   List<AppUser> _apply(List<AppUser> all) {
     List<AppUser> list = all;
@@ -112,42 +120,50 @@ class _UsersScreenState extends State<UsersScreen> {
     return Scaffold(
       backgroundColor: _kBg,
       appBar: _buildAppBar(),
-      body: StreamBuilder<List<AppUser>>(
-        stream: UserService.instance.streamUsers(),
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const _LoadingState();
-          }
-          if (snap.hasError) {
-            return _ErrorState(error: snap.error.toString());
-          }
-          final all = snap.data ?? [];
-          final filtered = _apply(all);
+      body: StreamBuilder<List<String>>(
+        stream: _streamRoleNames(),
+        builder: (context, roleSnap) {
+          final roleNames = roleSnap.data ?? const ['member', 'admin'];
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Stats
-              _StatsSection(users: all),
-              // Search + Filters
-              _SearchFilterBar(
-                controller: _searchCtrl,
-                currentFilter: _filter,
-                onSearch: (v) => setState(() => _search = v),
-                onFilter: (f) => setState(() => _filter = f),
-              ),
-              // List
-              Expanded(
-                child: filtered.isEmpty
-                    ? const _EmptyState()
-                    : _UsersList(
-                  users: filtered,
-                  onDelete: (u) => _confirmDelete(u),
-                  onToggleBlock: (u) => _confirmBlock(u),
-                  onRoleChange: (u, role) => _changeRole(u, role),
-                ),
-              ),
-            ],
+          return StreamBuilder<List<AppUser>>(
+            stream: UserService.instance.streamUsers(),
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const _LoadingState();
+              }
+              if (snap.hasError) {
+                return _ErrorState(error: snap.error.toString());
+              }
+              final all = snap.data ?? [];
+              final filtered = _apply(all);
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Stats
+                  _StatsSection(users: all),
+                  // Search + Filters
+                  _SearchFilterBar(
+                    controller: _searchCtrl,
+                    currentFilter: _filter,
+                    onSearch: (v) => setState(() => _search = v),
+                    onFilter: (f) => setState(() => _filter = f),
+                  ),
+                  // List
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const _EmptyState()
+                        : _UsersList(
+                      users: filtered,
+                      roleNames: roleNames,
+                      onDelete: (u) => _confirmDelete(u),
+                      onToggleBlock: (u) => _confirmBlock(u),
+                      onRoleChange: (u, role) => _changeRole(u, role),
+                    ),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
@@ -561,12 +577,14 @@ class _FilterChipState extends State<_FilterChip> {
 
 class _UsersList extends StatelessWidget {
   final List<AppUser> users;
+  final List<String> roleNames;
   final ValueChanged<AppUser> onDelete;
   final ValueChanged<AppUser> onToggleBlock;
   final void Function(AppUser, String) onRoleChange;
 
   const _UsersList({
     required this.users,
+    required this.roleNames,
     required this.onDelete,
     required this.onToggleBlock,
     required this.onRoleChange,
@@ -581,6 +599,7 @@ class _UsersList extends StatelessWidget {
         if (isWide) {
           return _UsersTable(
             users: users,
+            roleNames: roleNames,
             onDelete: onDelete,
             onToggleBlock: onToggleBlock,
             onRoleChange: onRoleChange,
@@ -594,6 +613,7 @@ class _UsersList extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 12),
             child: _UserCard(
               user: users[i],
+              roleNames: roleNames,
               onDelete: () => onDelete(users[i]),
               onToggleBlock: () => onToggleBlock(users[i]),
               onRoleChange: (role) => onRoleChange(users[i], role),
@@ -609,12 +629,14 @@ class _UsersList extends StatelessWidget {
 
 class _UsersTable extends StatelessWidget {
   final List<AppUser> users;
+  final List<String> roleNames;
   final ValueChanged<AppUser> onDelete;
   final ValueChanged<AppUser> onToggleBlock;
   final void Function(AppUser, String) onRoleChange;
 
   const _UsersTable({
     required this.users,
+    required this.roleNames,
     required this.onDelete,
     required this.onToggleBlock,
     required this.onRoleChange,
@@ -666,6 +688,7 @@ class _UsersTable extends StatelessWidget {
               const Divider(height: 1, color: _kBorder),
               itemBuilder: (_, i) => _TableRow(
                 user: users[i],
+                roleNames: roleNames,
                 onDelete: () => onDelete(users[i]),
                 onToggleBlock: () => onToggleBlock(users[i]),
                 onRoleChange: (role) => onRoleChange(users[i], role),
@@ -697,12 +720,14 @@ class _HeaderCell extends StatelessWidget {
 
 class _TableRow extends StatefulWidget {
   final AppUser user;
+  final List<String> roleNames;
   final VoidCallback onDelete;
   final VoidCallback onToggleBlock;
   final ValueChanged<String> onRoleChange;
 
   const _TableRow({
     required this.user,
+    required this.roleNames,
     required this.onDelete,
     required this.onToggleBlock,
     required this.onRoleChange,
@@ -792,6 +817,7 @@ class _TableRowState extends State<_TableRow> {
               flex: 2,
               child: _RoleDropdown(
                 role: u.role,
+                roleNames: widget.roleNames,
                 onChanged: widget.onRoleChange,
               ),
             ),
@@ -842,12 +868,14 @@ class _TableRowState extends State<_TableRow> {
 
 class _UserCard extends StatefulWidget {
   final AppUser user;
+  final List<String> roleNames;
   final VoidCallback onDelete;
   final VoidCallback onToggleBlock;
   final ValueChanged<String> onRoleChange;
 
   const _UserCard({
     required this.user,
+    required this.roleNames,
     required this.onDelete,
     required this.onToggleBlock,
     required this.onRoleChange,
@@ -953,6 +981,7 @@ class _UserCardState extends State<_UserCard> {
                       const SizedBox(height: 6),
                       _RoleDropdown(
                         role: u.role,
+                        roleNames: widget.roleNames,
                         onChanged: widget.onRoleChange,
                       ),
                     ],
@@ -1126,9 +1155,14 @@ class _StatusBadge extends StatelessWidget {
 
 class _RoleDropdown extends StatelessWidget {
   final String role;
+  final List<String> roleNames;
   final ValueChanged<String> onChanged;
 
-  const _RoleDropdown({required this.role, required this.onChanged});
+  const _RoleDropdown({
+    required this.role,
+    required this.roleNames,
+    required this.onChanged,
+  });
 
   Color get _roleColor {
     switch (role) {
@@ -1138,8 +1172,18 @@ class _RoleDropdown extends StatelessWidget {
     }
   }
 
+  String _label(String r) => r
+      .split(' ')
+      .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+      .join(' ');
+
   @override
   Widget build(BuildContext context) {
+    // Always include the user's current role, even if it was later
+    // deleted from the roles collection, so DropdownButton never
+    // receives a value that isn't present in its items list.
+    final items = {role, ...roleNames}.toList();
+
     return Container(
       height: 32,
       padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -1158,11 +1202,10 @@ class _RoleDropdown extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.w700,
               color: _roleColor),
-          items: const [
-            DropdownMenuItem(value: 'member',    child: Text('Member')),
-            DropdownMenuItem(value: 'moderator', child: Text('Moderator')),
-            DropdownMenuItem(value: 'admin',     child: Text('Admin')),
-          ],
+          items: items
+              .map((r) =>
+              DropdownMenuItem(value: r, child: Text(_label(r))))
+              .toList(),
           onChanged: (v) {
             if (v != null && v != role) onChanged(v);
           },
@@ -1214,23 +1257,6 @@ class _ActionButtons extends StatelessWidget {
   }
 }
 
-class _SmallBtn extends StatefulWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _SmallBtn({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  State<_SmallBtn> createState() => _SmallBtnState();
-}
-
 class _SmallBtnState extends State<_SmallBtn> {
   bool _hovered = false;
 
@@ -1272,6 +1298,23 @@ class _SmallBtnState extends State<_SmallBtn> {
       ),
     );
   }
+}
+
+class _SmallBtn extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _SmallBtn({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  State<_SmallBtn> createState() => _SmallBtnState();
 }
 
 // ── Confirm dialog ────────────────────────────────────────────────────────────
