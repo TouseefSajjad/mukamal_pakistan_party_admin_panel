@@ -10,6 +10,21 @@ import '../../config/app_theme.dart';
 
 import '../../widgets/admin_app_bar.dart';
 
+/// bilingualText/bilingualLongText fields are stored as a map, e.g.
+/// `{ en: "...", ur: "..." }`. This pulls a plain string out of that map
+/// (falling back to Urdu if English is empty) for list previews — or
+/// just returns the value as-is if it isn't bilingual.
+String _displayText(dynamic raw) {
+  if (raw == null) return '';
+  if (raw is Map) {
+    final en = raw['en'];
+    if (en != null && en.toString().trim().isNotEmpty) return en.toString();
+    final ur = raw['ur'];
+    return ur?.toString() ?? '';
+  }
+  return raw.toString();
+}
+
 /// One generic, reusable CRUD screen driven entirely by a list of
 /// [FieldConfig]. Used for leadership, manifesto_points, news, events,
 /// gallery, videos and contact_messages so each collection doesn't need
@@ -59,11 +74,11 @@ class _GenericListScreenState extends State<GenericListScreen> {
       appBar: AdminAppBar(title: widget.title),
       floatingActionButton: widget.allowCreate
           ? FloatingActionButton.extended(
-              backgroundColor: AppTheme.primaryGreen,
-              onPressed: () => _openForm(context, null),
-              icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text('Add', style: TextStyle(color: Colors.white)),
-            )
+        backgroundColor: AppTheme.primaryGreen,
+        onPressed: () => _openForm(context, null),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Add', style: TextStyle(color: Colors.white)),
+      )
           : null,
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: query.snapshots(),
@@ -97,11 +112,11 @@ class _GenericListScreenState extends State<GenericListScreen> {
               final data = doc.data();
               final imageField = widget.fields
                   .firstWhere((f) => f.type == FieldType.image,
-                      orElse: () => const FieldConfig(
-                          key: '', label: '', type: FieldType.text))
+                  orElse: () => const FieldConfig(
+                      key: '', label: '', type: FieldType.text))
                   .key;
               final imageUrl =
-                  imageField.isNotEmpty ? data[imageField] as String? : null;
+              imageField.isNotEmpty ? data[imageField] as String? : null;
 
               return Container(
                 decoration: BoxDecoration(
@@ -111,47 +126,47 @@ class _GenericListScreenState extends State<GenericListScreen> {
                 ),
                 child: ListTile(
                   contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   leading: imageUrl != null && imageUrl.isNotEmpty
                       ? ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Image.network(
-                            imageUrl,
-                            width: 48,
-                            height: 48,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Icon(
-                                Icons.broken_image_outlined,
-                                color: AppTheme.textSecondary),
-                          ),
-                        )
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.network(
+                      imageUrl,
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(
+                          Icons.broken_image_outlined,
+                          color: AppTheme.textSecondary),
+                    ),
+                  )
                       : CircleAvatar(
-                          backgroundColor:
-                              AppTheme.primaryGreen.withOpacity(0.1),
-                          child: const Icon(Icons.article_outlined,
-                              color: AppTheme.primaryGreen),
-                        ),
+                    backgroundColor:
+                    AppTheme.primaryGreen.withOpacity(0.1),
+                    child: const Icon(Icons.article_outlined,
+                        color: AppTheme.primaryGreen),
+                  ),
                   title: Text(
-                    (data[widget.displayField] ?? '').toString(),
+                    _displayText(data[widget.displayField]),
                     style: const TextStyle(
                         fontWeight: FontWeight.w600,
                         color: AppTheme.textPrimary),
                   ),
                   subtitle: widget.subtitleField != null
                       ? Text(
-                          (data[widget.subtitleField!] ?? '').toString(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: AppTheme.textSecondary),
-                        )
+                    _displayText(data[widget.subtitleField!]),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppTheme.textSecondary),
+                  )
                       : null,
                   onTap: () => _openForm(context, doc),
                   trailing: widget.allowDelete
                       ? IconButton(
-                          icon: const Icon(Icons.delete_outline,
-                              color: Colors.redAccent),
-                          onPressed: () => _confirmDelete(context, doc.id),
-                        )
+                    icon: const Icon(Icons.delete_outline,
+                        color: Colors.redAccent),
+                    onPressed: () => _confirmDelete(context, doc.id),
+                  )
                       : null,
                 ),
               );
@@ -255,6 +270,15 @@ class _EntryFormSheetState extends State<_EntryFormSheet> {
           final ts = data[f.key];
           _dateValues[f.key] = ts is Timestamp ? ts.toDate() : null;
           break;
+        case FieldType.bilingualText:
+        case FieldType.bilingualLongText:
+          final raw = data[f.key];
+          final map = raw is Map ? raw : const {};
+          _controllers['${f.key}::en'] =
+              TextEditingController(text: (map['en'] ?? '').toString());
+          _controllers['${f.key}::ur'] =
+              TextEditingController(text: (map['ur'] ?? '').toString());
+          break;
         default:
           final raw = data[f.key];
           _controllers[f.key] =
@@ -331,6 +355,13 @@ class _EntryFormSheetState extends State<_EntryFormSheet> {
             final text = _controllers[f.key]!.text.trim();
             data[f.key] = text.isEmpty ? null : num.tryParse(text);
             break;
+          case FieldType.bilingualText:
+          case FieldType.bilingualLongText:
+            data[f.key] = {
+              'en': _controllers['${f.key}::en']!.text.trim(),
+              'ur': _controllers['${f.key}::ur']!.text.trim(),
+            };
+            break;
           default:
             data[f.key] = _controllers[f.key]!.text.trim();
         }
@@ -374,6 +405,41 @@ class _EntryFormSheetState extends State<_EntryFormSheet> {
             validator: (v) => f.required && (v == null || v.trim().isEmpty)
                 ? '${f.label} is required'
                 : null,
+          ),
+        );
+      case FieldType.bilingualText:
+      case FieldType.bilingualLongText:
+        final maxLines = f.type == FieldType.bilingualLongText ? 4 : 1;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                controller: _controllers['${f.key}::en'],
+                readOnly: f.readOnly,
+                maxLines: maxLines,
+                decoration: InputDecoration(
+                  labelText: '${f.label} (English)',
+                  border: const OutlineInputBorder(),
+                ),
+                validator: (v) => f.required && (v == null || v.trim().isEmpty)
+                    ? '${f.label} (English) is required'
+                    : null,
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _controllers['${f.key}::ur'],
+                readOnly: f.readOnly,
+                maxLines: maxLines,
+                textDirection: TextDirection.rtl,
+                textAlign: TextAlign.right,
+                decoration: InputDecoration(
+                  labelText: '${f.label} (اردو)',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ],
           ),
         );
       case FieldType.number:
@@ -464,13 +530,13 @@ class _EntryFormSheetState extends State<_EntryFormSheet> {
                     ),
                     child: url.isEmpty
                         ? const Icon(Icons.image_outlined,
-                            color: AppTheme.textSecondary)
+                        color: AppTheme.textSecondary)
                         : ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: Image.network(url, fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(
-                                    Icons.broken_image_outlined)),
-                          ),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(url, fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const Icon(
+                              Icons.broken_image_outlined)),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -480,9 +546,9 @@ class _EntryFormSheetState extends State<_EntryFormSheet> {
                           : () => _pickAndUploadImage(f),
                       icon: _uploadingImage
                           ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2))
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.upload_outlined, size: 18),
                       label: Text(url.isEmpty ? 'Upload image' : 'Replace image'),
                     ),
@@ -545,12 +611,12 @@ class _EntryFormSheetState extends State<_EntryFormSheet> {
                     ),
                     child: _saving
                         ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
                         : const Text('Save',
-                            style: TextStyle(color: Colors.white)),
+                        style: TextStyle(color: Colors.white)),
                   ),
                 ),
               ],
