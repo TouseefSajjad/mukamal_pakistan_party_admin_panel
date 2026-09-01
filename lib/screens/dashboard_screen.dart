@@ -39,7 +39,37 @@ class DashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundWhite,
-      appBar: const AdminAppBar(title: 'Mukammal Pakistan Party'),
+      appBar: AdminAppBar(
+        title: 'Mukammal Pakistan Party',
+        extraActions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppTheme.primaryGreen,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: TextButton.icon(
+                onPressed: () =>
+                    Navigator.of(context).pushNamed(AppRoutes.manageWebsite),
+                icon: const Icon(Icons.language_rounded,
+                    color: Colors.white, size: 18),
+                label: const Text(
+                  'Manage Website',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isWide = constraints.maxWidth >= 900;
@@ -167,7 +197,7 @@ class DashboardScreen extends StatelessWidget {
               children: [
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(8),
@@ -241,25 +271,25 @@ class DashboardScreen extends StatelessWidget {
 
     return isMedium
         ? Row(
-            children: stats
-                .map((s) => Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          right: stats.last == s ? 0 : 16,
-                        ),
-                        child: _StatCard(stat: s),
-                      ),
-                    ))
-                .toList(),
-          )
+      children: stats
+          .map((s) => Expanded(
+        child: Padding(
+          padding: EdgeInsets.only(
+            right: stats.last == s ? 0 : 16,
+          ),
+          child: _StatCard(stat: s),
+        ),
+      ))
+          .toList(),
+    )
         : Column(
-            children: stats
-                .map((s) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _StatCard(stat: s),
-                    ))
-                .toList(),
-          );
+      children: stats
+          .map((s) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: _StatCard(stat: s),
+      ))
+          .toList(),
+    );
   }
 
   // ── Footer ──────────────────────────────────────────────────────────────────

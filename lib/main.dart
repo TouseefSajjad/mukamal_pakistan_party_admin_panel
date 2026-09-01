@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:mukammal_pakistan_admin/Website/website_dashboard_screen.dart';
 import 'package:mukammal_pakistan_admin/screens/LOGIN.dart';
 import 'config/app_routes.dart';
 import 'config/app_theme.dart';
@@ -9,6 +10,7 @@ import 'screens/dashboard_screen.dart';
 import 'screens/membership_applications_screen.dart';
 import 'screens/roles_screen.dart';
 import 'screens/users_screen.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,6 +40,7 @@ class MukammalPakistanAdminApp extends StatelessWidget {
         const MembershipApplicationsScreen(),
         AppRoutes.roles: (_) => const RolesScreen(),
         AppRoutes.banners: (_) => const BannersScreen(),
+        AppRoutes.manageWebsite: (_) => const WebsiteDashboardScreen(), // ← new
       },
     );
   }

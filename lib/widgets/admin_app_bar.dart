@@ -4,11 +4,13 @@ import '../config/app_theme.dart';
 class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final bool showBack;
+  final List<Widget> extraActions; // ← new: optional buttons before the Admin badge
 
   const AdminAppBar({
     super.key,
     required this.title,
     this.showBack = false,
+    this.extraActions = const [],
   });
 
   @override
@@ -30,21 +32,21 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
         automaticallyImplyLeading: showBack,
         leading: showBack
             ? IconButton(
-                icon: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryGreen.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.arrow_back_rounded,
-                    color: AppTheme.primaryGreen,
-                    size: 18,
-                  ),
-                ),
-                onPressed: () => Navigator.of(context).pop(),
-              )
+          icon: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppTheme.primaryGreen.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.arrow_back_rounded,
+              color: AppTheme.primaryGreen,
+              size: 18,
+            ),
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+        )
             : null,
         title: Row(
           children: [
@@ -81,6 +83,7 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
           ],
         ),
         actions: [
+          ...extraActions,
           Padding(
             padding: const EdgeInsets.only(right: 20),
             child: Container(
