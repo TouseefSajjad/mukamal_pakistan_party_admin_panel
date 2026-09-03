@@ -73,9 +73,34 @@ class _BannersScreenState extends State<BannersScreen> {
         .collection('banners')
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => BannerModel.fromDoc(doc))
-          .toList();
+      final List<BannerModel> banners = [];
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>? ?? {};
+
+        // ------------------------------------------------------
+        // EXCLUDE WEBSITE BANNERS
+        // ------------------------------------------------------
+        //
+        // Banners created from the Website Management screen carry
+        // a non-empty 'webTitle' field. Those belong on the website
+        // banners screen only — keep them out of this mobile-app
+        // banners list so the two don't overlap.
+        // ------------------------------------------------------
+
+        final dynamic webTitleValue = data['webTitle'];
+
+        final bool isWebsiteBanner = webTitleValue is String &&
+            webTitleValue.trim().isNotEmpty;
+
+        if (isWebsiteBanner) {
+          continue;
+        }
+
+        banners.add(BannerModel.fromDoc(doc));
+      }
+
+      return banners;
     });
   }
 
@@ -137,9 +162,6 @@ class _BannersScreenState extends State<BannersScreen> {
                       GestureDetector(
                         onTap: () async {
                           final result = await FilePicker.pickFiles(
-                            type: FileType.image,
-                            withData: true,
-                          );(
                             type: FileType.image,
                             withData: true,
                           );
@@ -245,7 +267,12 @@ class _BannersScreenState extends State<BannersScreen> {
                           .child('banners')
                           .child('$fileName.jpg');
 
-                      await ref.putData(imageBytes!);
+                      await ref.putData(
+                        imageBytes!,
+                        SettableMetadata(
+                          contentType: 'image/jpeg',
+                        ),
+                      );
 
                       final imageUrl =
                       await ref.getDownloadURL();
@@ -544,8 +571,20 @@ class _BannerCardState extends State<_BannerCard> {
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(22),
                 ),
-                child: Image.network(
+                child: banner.imageUrl.trim().isEmpty
+                    ? Container(
+                  color: const Color(0xFFF3F4F6),
+                  child: const Center(
+                    child: Icon(
+                      Icons.image_outlined,
+                      size: 42,
+                      color: Colors.grey,
+                    ),
+                  ),
+                )
+                    : Image.network(
                   banner.imageUrl,
+                  key: ValueKey(banner.imageUrl),
                   width: double.infinity,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) {
@@ -557,6 +596,26 @@ class _BannerCardState extends State<_BannerCard> {
                           size: 42,
                           color: Colors.grey,
                         ),
+                      ),
+                    );
+                  },
+                  loadingBuilder:
+                      (context, child, loadingProgress) {
+                    if (loadingProgress == null) {
+                      return child;
+                    }
+
+                    return Center(
+                      child: CircularProgressIndicator(
+                        color: _kGreen,
+                        value: loadingProgress
+                            .expectedTotalBytes !=
+                            null
+                            ? loadingProgress
+                            .cumulativeBytesLoaded /
+                            loadingProgress
+                                .expectedTotalBytes!
+                            : null,
                       ),
                     );
                   },

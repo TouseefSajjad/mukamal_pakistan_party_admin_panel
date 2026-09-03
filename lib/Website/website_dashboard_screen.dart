@@ -6,6 +6,8 @@ import '../../widgets/dashboard_card.dart';
 import 'generic_list_screen.dart';
 import 'site_settings_screen.dart';
 import 'website_module_configs.dart';
+import 'websitebanner.dart';
+
 
 /// Opened from the "Manage Website" card on the main DashboardScreen.
 /// Same visual language (AdminAppBar, DashboardCard, AppTheme) as the
@@ -101,21 +103,12 @@ class WebsiteDashboardScreen extends StatelessWidget {
         ),
       ),
       _WebsiteModule(
-        icon: Icons.mail_outline_rounded,
-        label: 'Contact Messages',
-        description: 'Messages submitted through the website Contact form.',
-        builder: (_) => const GenericListScreen(
-          collectionName: 'contact_messages',
-          title: 'Contact Messages',
-          fields: contactMessageFields,
-          displayField: 'name',
-          subtitleField: 'status',
-          orderByField: 'submittedAt',
-          orderDescending: true,
-          allowCreate: false,
-          allowDelete: true,
-        ),
+        icon: Icons.image_outlined,
+        label: 'Banners',
+        description: 'Homepage banners shown on the website only.',
+        builder: (_) => const WebsiteBannersScreen(),
       ),
+
     ];
 
     return Scaffold(
